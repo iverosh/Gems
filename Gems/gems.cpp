@@ -303,21 +303,8 @@ void GemsField::delete_combination(Clock& clc)
 		dead_gems.clear();
 		if (burst_combination.size())
 		{
-			cout << "comb" << endl;
-			for (int i = 0; i < combination.size(); i++)
-			{
-				cout << combination.at(i).x << " " << combination.at(i).y << endl;
-			}
-			cout << endl;
-
 			combination = burst_combination;
 			burst_combination.clear();
-			cout << "bomb" << endl;
-			for (int i = 0; i < combination.size(); i++)
-			{
-				cout << combination.at(i).x << " " << combination.at(i).y << endl;
-			}
-			cout << endl;
 			deleting_stage = 1;
 			is_burst = 1;
 		}
