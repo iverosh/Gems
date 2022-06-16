@@ -21,7 +21,7 @@ GemsField:: GemsField()
 	}
 	chosen1 = Vector2i(-1, -1);
 	chosen2 = Vector2i(-1, -1);
-	scaling_stage = -2;
+	swap_stage = SwapStage::None;
 	deleting_stage = 0;
 	updating_stage = 1;
 	is_burst = 0;
@@ -37,22 +37,22 @@ void GemsField::draw(RenderWindow& win)
 	{
 		for (int j = 0; j < count_of_gems; j++)
 		{
-			if (gems.at(i).at(j) != nullptr)
-				gems.at(i).at(j)->draw(win);
+			if (gems[i][j] != nullptr)
+				gems[i][j]->draw(win);
 
 		}
 	}
 }
 
 
-Vector2i GemsField:: clicked_gem_number(Vector2i mouse)
+Vector2i GemsField:: clicked_gem_number(const Vector2i mouse)
 {
 	for (int i = 0; i < count_of_gems; i++)
 	{
 		for (int j = 0; j < count_of_gems; j++)
 		{
-			double size = gems.at(i).at(j)->size / 2;
-			Vector2f pos = gems.at(i).at(j)->get_position();
+			double size = gems[i][j]->size / 2;
+			Vector2f pos = gems[i][j]->get_position();
 			if (pos.x + size >= mouse.x && pos.x - size <= mouse.x && pos.y + size >= mouse.y && pos.y - size <= mouse.y)
 				return Vector2i(i, j);
 		}
@@ -61,21 +61,27 @@ Vector2i GemsField:: clicked_gem_number(Vector2i mouse)
 }
 
 
-void GemsField:: make_chosen(Vector2i first)
+void GemsField:: make_chosen(const Vector2i first)
 {
-	double scale = gems.at(first.x).at(first.y)->normal_scale * 1.2;
-	gems.at(first.x).at(first.y)->set_scale(scale);
+	double scale = gems[first.x][first.y]->normal_scale * 1.2;
+	gems[first.x][first.y]->set_scale(scale);
 }
 
 
-void GemsField:: make_unchosen(Vector2i first)
+void GemsField:: make_unchosen(const Vector2i first)
 {
-	double scale = gems.at(first.x).at(first.y)->normal_scale;
-	gems.at(first.x).at(first.y)->set_scale(scale);
+	double scale = gems[first.x][first.y]->normal_scale;
+	gems[first.x][first.y]->set_scale(scale);
 }
 
+bool GemsField::is_near(const Vector2i first, const Vector2i second) const
+{
+	int differ_x = abs(first.x - second.x);
+	int differ_y = abs(first.y - second.y);
+	return differ_x == 1 && differ_y == 0 || differ_x == 0 && differ_y == 1;
+}
 
-void GemsField:: choosing(RenderWindow& win, Clock clc)
+void GemsField:: choosing(RenderWindow& win, Clock &clc)
 {
 
 	if (chosen1 == Vector2i(-1, -1))
@@ -104,84 +110,107 @@ void GemsField:: set_count_of_deleting_blocks()
 {
 	for (int i = 0; i < combination.size(); i++)
 	{
-		for (int j = 0; j < combination.at(i).y; j++)
+		for (int j = 0; j < combination[i].y; j++)
 		{
-			gems.at(combination.at(i).x).at(j)->count_of_deleting_blocks_under++;
+			gems[combination[i].x][j]->count_of_deleting_blocks_under++;
 			
 		}
 	}
 	for (int i = 0; i < combination.size(); i++)
-		gems.at(combination.at(i).x).at(combination.at(i).y)->count_of_deleting_blocks_under = -1;/////
+		gems[combination[i].x][combination[i].y]->count_of_deleting_blocks_under = -1;/////
 }
 
 
+bool GemsField::compress(RenderWindow& win, const float elapsed, const Vector2i gem)
+{
+	if (gems[gem.x][gem.y]->get_scale() > 0)
+	{
+		gems[gem.x][gem.y]->change_scale(scaling_speed * elapsed / 100);
+		return 0;
+	}
+	else
+	{
+		gems[gem.x][gem.y]->set_scale(0);
+		return 1;
+	}
+}
 
-void GemsField::swap(RenderWindow& win, Clock& clc)
+
+void GemsField::swap()
+{
+	unique_ptr<Gem> tmp = move(gems[chosen1.x][chosen1.y]);
+	gems[chosen1.x][chosen1.y] = move(gems[chosen2.x][chosen2.y]);
+	gems[chosen2.x][chosen2.y]= move(tmp);
+
+	Vector2f pos = gems[chosen1.x][chosen1.y]->get_position();
+	gems[chosen1.x][chosen1.y]->set_position(gems[chosen2.x][chosen2.y]->get_position());
+	gems[chosen2.x][chosen2.y]->set_position(pos);
+	
+
+}
+
+
+bool GemsField::decompress(RenderWindow& win, const float elapsed, const Vector2i gem)
+{
+	if (gems[gem.x][gem.y]->get_scale() < gems[gem.x][gem.y]->normal_scale)
+	{
+		gems[gem.x][gem.y]->change_scale(-scaling_speed * elapsed / 100);
+		return 0;
+	}
+	else
+	{
+		gems[gem.x][chosen1.y]->set_scale(gems[gem.x][gem.y]->normal_scale);
+		return 1;
+	}
+
+
+}
+
+void GemsField::swap_chosen_gems(RenderWindow& win, Clock& clc)
 {
 
 	float elapsed;
-	if (scaling_stage == -1)
+	if (swap_stage == SwapStage::Compression)
 	{
-		if (gems.at(chosen1.x).at(chosen1.y)->get_scale() > 0)
-		{
-			elapsed = clc.restart().asMilliseconds();
-			gems.at(chosen1.x).at(chosen1.y)->change_scale(scaling_speed * elapsed / 50);
-			gems.at(chosen2.x).at(chosen2.y)->change_scale(scaling_speed * elapsed / 50);
-		}
-		else
-		{
-			scaling_stage = 0;
-			gems.at(chosen1.x).at(chosen1.y)->set_scale(0);
-			gems.at(chosen2.x).at(chosen2.y)->set_scale(0);
-		}
+		elapsed = clc.restart().asMilliseconds();
+		if (compress(win, elapsed, chosen1) + compress(win, elapsed, chosen2) == 2)
+			swap_stage = SwapStage::Swapping;
 	}
-	if (scaling_stage == 0)
+	if (swap_stage == SwapStage::Swapping)
 	{
-		unique_ptr<Gem> tmp = move(gems.at(chosen1.x).at(chosen1.y));
-		gems.at(chosen1.x).at(chosen1.y) = move(gems.at(chosen2.x).at(chosen2.y));
-		gems.at(chosen2.x).at(chosen2.y) = move(tmp);
-		Vector2f pos = gems.at(chosen1.x).at(chosen1.y)->get_position();
-		gems.at(chosen1.x).at(chosen1.y)->set_position(gems.at(chosen2.x).at(chosen2.y)->get_position());
-		gems.at(chosen2.x).at(chosen2.y)->set_position(pos);
-		scaling_stage = 1;
+		swap();
+		swap_stage = SwapStage::Decompression;
 	}
-	if (scaling_stage == 1)
+
+	if (swap_stage == SwapStage::Decompression)
 	{
-		if (gems.at(chosen1.x).at(chosen1.y)->get_scale() < gems.at(chosen1.x).at(chosen1.y)->normal_scale)
+		elapsed = clc.restart().asMilliseconds();
+		if (decompress(win, elapsed, chosen1) + decompress(win, elapsed, chosen2) == 2)
 		{
-			elapsed = clc.restart().asMilliseconds();
-			gems.at(chosen1.x).at(chosen1.y)->change_scale(-scaling_speed * elapsed / 200);
-			gems.at(chosen2.x).at(chosen2.y)->change_scale(-scaling_speed * elapsed / 200);
-		}
-		else
-		{
-			scaling_stage = -2;
-			gems.at(chosen1.x).at(chosen1.y)->set_scale(gems.at(chosen1.x).at(chosen1.y)->normal_scale);
-			gems.at(chosen2.x).at(chosen2.y)->set_scale(gems.at(chosen1.x).at(chosen1.y)->normal_scale);
+			swap_stage = SwapStage::None;
 			chosen1 = Vector2i(-1, -1);
 			chosen2 = Vector2i(-1, -1);
-
 		}
-
+		
 	}
 
 }
 
-bool GemsField:: is_in_combination(Vector2i x)
+bool GemsField:: is_in_combination(const Vector2i x) const
 {
 	for (int i = 0; i < combination.size(); i++)
 	{
-		if (x == combination.at(i))
+		if (x == combination[i])
 			return 1;
 	}
 	return 0;
 }
 
-bool GemsField::is_in_burst_combination(Vector2i x)
+bool GemsField::is_in_burst_combination(const Vector2i x) const
 {
 	for (int i = 0; i < burst_combination.size(); i++)
 	{
-		if (x == burst_combination.at(i))
+		if (x == burst_combination[i])
 			return 1;
 	}
 	return 0;
@@ -201,7 +230,7 @@ void GemsField::delete_combination(Clock& clc)
 	if (is_burst)
 	{
 		for (int i = 0; i < combination.size(); i++)
-			gems.at(combination.at(i).x).at(combination.at(i).y)->sprite.setTexture(burst);
+			gems[combination[i].x][combination[i].y]->sprite.setTexture(burst);
 		is_burst = 0;
 		sleep(seconds(1));
 	}
@@ -210,11 +239,11 @@ void GemsField::delete_combination(Clock& clc)
 		for (int i = 0; i < combination.size(); i++)
 		{
 
-			if (gems.at(combination.at(i).x).at(combination.at(i).y)->get_scale() > 0)
-				gems.at(combination.at(i).x).at(combination.at(i).y)->change_scale(scaling_speed * elapsed / 300);
+			if (gems[combination[i].x][combination[i].y]->get_scale() > 0)
+				gems[combination[i].x][combination[i].y]->change_scale(scaling_speed * elapsed / 300);
 			else
 			{
-				gems.at(combination.at(i).x).at(combination.at(i).y)->set_scale(0);
+				gems[combination[i].x][combination[i].y]->set_scale(0);
 				deleting_stage = 3;
 			}
 		}
@@ -223,27 +252,25 @@ void GemsField::delete_combination(Clock& clc)
 	{
 		set_count_of_deleting_blocks();
 		for (int i = 0; i < combination.size(); i++)
-			count_of_deleted_blocks.at(combination.at(i).x)++;
+			count_of_deleted_blocks[combination[i].x]++;
 		for (int i = 0; i < count_of_gems; i++)
 		{
 			for (int j = 0; j < count_of_gems; j++)
-				gems.at(i).at(j)->set_fall_pos();
+				gems[i][j]->set_fall_pos();
 		}
 		deleting_stage = 4;
 	}
 	if (deleting_stage == 4)
 	{
 		int flag = 1;
-		//float elapsed = clc.restart().asMilliseconds();
+			
 		for (int i = 0; i < combination.size(); i++)
 		{
-			for (int j = 0; j < combination.at(i).y; j++)
+			for (int j = 0; j < combination[i].y; j++)
 			{
-				if (gems.at(combination.at(i).x).at(j)->fall_down(elapsed) == 0)
-				{
+				if (gems[combination[i].x][j]->fall_down(elapsed) == 0)
 					flag = 0;
-					//gems.at(combination.at(i).x).at(j)->count_of_deleting_blocks_under = 0;
-				}
+		
 			}
 		}
 		if (flag == 1)
@@ -253,7 +280,7 @@ void GemsField::delete_combination(Clock& clc)
 			{
 				for (int j = 0; j < count_of_gems; j++)
 				{
-					gems.at(i).at(j)->number_y = j;
+					gems[i][j]->number_y = j;
 				}
 
 			}
@@ -267,11 +294,11 @@ void GemsField::delete_combination(Clock& clc)
 		{
 			for (int j = count_of_gems - 1; j >= 0; j--)
 			{
-				if (gems.at(i).at(j)->count_of_deleting_blocks_under > 0)
-					gems.at(i).at(j + gems.at(i).at(j)->count_of_deleting_blocks_under) = move(gems.at(i).at(j));
-				else if (gems.at(i).at(j)->count_of_deleting_blocks_under < 0)
+				if (gems[i][j]->count_of_deleting_blocks_under > 0)
+					gems[i][j + gems[i][j]->count_of_deleting_blocks_under] = move(gems[i][j]);
+				else if (gems[i][j]->count_of_deleting_blocks_under < 0)
 				{
-					dead_gems.push_back(move(gems.at(i).at(j)));
+					dead_gems.push_back(move(gems[i][j]));
 
 				}
 			}
@@ -283,23 +310,23 @@ void GemsField::delete_combination(Clock& clc)
 	{
 		for (int i = 0; i < count_of_gems; i++)
 		{
-			for (int j = 0; j < count_of_deleted_blocks.at(i); j++)
-				gems.at(i).at(count_of_deleted_blocks.at(i) - 1 - j) = make_unique<Gem>(i, count_of_deleted_blocks.at(i) - 1 - j, 1);
+			for (int j = 0; j < count_of_deleted_blocks[i]; j++)
+				gems[i][count_of_deleted_blocks[i] - 1 - j] = make_unique<Gem>(i, count_of_deleted_blocks[i] - 1 - j, 1);
 		}
 		
 		for (int i = 0; i < count_of_gems; i++)
 		{
 			for (int j = 0; j < count_of_gems; j++)
 			{
-				if (abs(gems.at(i).at(j)->fall_pos - gems.at(i).at(j)->get_position().y) < 0.1)
-					gems.at(i).at(j)->count_of_deleting_blocks_under = 0;
+				if (abs(gems[i][j]->fall_pos - gems[i][j]->get_position().y) < 0.1)
+					gems[i][j]->count_of_deleting_blocks_under = 0;
 			
 			}
 		
 		}
 
 		for (int i = 0; i < dead_gems.size(); i++) 
-			dead_gems.at(i)->death(*this);
+			dead_gems[i]->death(*this);
 		dead_gems.clear();
 		if (burst_combination.size())
 		{
@@ -320,9 +347,9 @@ void GemsField::delete_combination(Clock& clc)
 		//float elapsed = clc.restart().asMilliseconds();
 		for (int i = 0; i < count_of_gems; i++)
 		{
-			for (int j = 0; j < count_of_deleted_blocks.at(i); j++)
+			for (int j = 0; j < count_of_deleted_blocks[i]; j++)
 			{
-				if (gems.at(i).at(count_of_deleted_blocks.at(i) - 1 - j)->fall_down(elapsed) == 0)
+				if (gems[i][count_of_deleted_blocks[i]- 1 - j]->fall_down(elapsed) == 0)
 					flag = 0;
 			}
 		}
@@ -332,9 +359,9 @@ void GemsField::delete_combination(Clock& clc)
 			
 			for (int i = 0; i < count_of_gems; i++)
 			{
-				count_of_deleted_blocks.at(i) = 0;
+				count_of_deleted_blocks[i] = 0;
 				for (int j = 0; j < count_of_gems; j++)
-					gems.at(i).at(j)->count_of_deleting_blocks_under = 0;
+					gems[i][j]->count_of_deleting_blocks_under = 0;
 			}
 			
 			deleting_stage = 0;
@@ -345,21 +372,21 @@ void GemsField::delete_combination(Clock& clc)
 }
 
 
-void GemsField::test_gem(int x, int y)
+void GemsField::test_gem(const int x, const int y)
 {
-	if (gems_colors.at(x).at(y) == -1)
+	if (gems_colors[x][y] == -1)
 		return;
 	if (current_color == -1)
 	{
-		current_color = gems_colors.at(x).at(y);
-		gems_colors.at(x).at(y) = -1;
+		current_color = gems_colors[x][y];
+		gems_colors[x][y]= -1;
 		collector.push_back(Vector2i(x, y));
 	}
-	else if (current_color != gems_colors.at(x).at(y))
+	else if (current_color != gems_colors[x][y])
 		return;
 	else
 	{
-		gems_colors.at(x).at(y) = -1;
+		gems_colors[x][y] = -1;
 		collector.push_back(Vector2i(x, y));
 	}
 
@@ -384,7 +411,7 @@ void GemsField::search_combination()
 	for (int i = 0; i < count_of_gems; i++)
 	{
 		for (int j = 0; j < count_of_gems; j++)
-			gems_colors.at(i).at(j) = gems.at(i).at(j)->color;
+			gems_colors[i][j] = gems[i][j]->color;
 	}
 
 	for (int x = 0; x < count_of_gems; x++)
@@ -395,7 +422,7 @@ void GemsField::search_combination()
 			if (collector.size() >= 3)
 			{
 				for (int i = 0; i < collector.size(); i++)
-					combination.push_back(collector.at(i));
+					combination.push_back(collector[i]);
 			}
 			current_color = -1;
 			collector.clear();

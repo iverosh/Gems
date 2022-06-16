@@ -2,6 +2,7 @@
 #include "gem.hpp"
 
 
+
 int main()
 {
     srand(time(0));
@@ -11,6 +12,8 @@ int main()
    
     GemsField gems;
     
+    
+
     Clock clc;
    
     while (window.isOpen())
@@ -25,19 +28,19 @@ int main()
             {
                 if (gems.deleting_stage == 0)
                 {
-                    gems.scaling_stage = -1;
+                    gems.swap_stage = SwapStage::Compression;
                     gems.choosing(window, clc);
                 }
             }
             
         }
         if (gems.chosen2 != Vector2i(-1, -1))
-            gems.swap(window, clc);
+            gems.swap_chosen_gems(window, clc);
         window.clear();
       
         gems.draw(window);
         window.display();
-        if (gems.scaling_stage == -2)
+        if (gems.swap_stage == SwapStage::None)
             gems.update(clc); 
     }
     

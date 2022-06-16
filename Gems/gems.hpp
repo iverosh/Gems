@@ -11,6 +11,16 @@ using namespace std;
 
 class Gem;
 
+enum SwapStage
+{
+	None,
+	Compression,
+	Swapping,
+	Decompression
+
+};
+
+
 class GemsField
 {
 public:
@@ -22,7 +32,7 @@ public:
 	Vector2i chosen1;
 	Vector2i chosen2;
 	vector <int> count_of_deleted_blocks;
-	int scaling_stage;
+	SwapStage swap_stage;
 	int deleting_stage;
 	int updating_stage;
 	int current_color;
@@ -38,39 +48,21 @@ public:
 	
 
 	Vector2i clicked_gem_number(Vector2i mouse);
-
-	void make_chosen(Vector2i first);
+	void make_chosen(const Vector2i first);
+	void make_unchosen(const Vector2i first);
+	bool is_near(const Vector2i first, const Vector2i second) const;
 	
-	void make_unchosen(Vector2i first);
-	
-	bool is_near(Vector2i first, Vector2i second)
-	{
-		int differ_x = abs(first.x - second.x);
-		int differ_y = abs(first.y - second.y);
-		return differ_x == 1 && differ_y == 0 || differ_x == 0 && differ_y == 1;
-	}
-
-	void swap(RenderWindow& win, Clock& clc);
-	
-	void choosing(RenderWindow& win, Clock clc);
-	
-
+	bool compress(RenderWindow& win, const float elapsed, const Vector2i gem);
+	void swap();
+	bool decompress(RenderWindow& win, const float elapsed, const Vector2i gem);
+	void swap_chosen_gems(RenderWindow& win, Clock& clc);
+	void choosing(RenderWindow& win, Clock &clc);
 	void set_count_of_deleting_blocks();
-
-
-	bool is_in_combination(Vector2i x);
-
-	bool is_in_burst_combination(Vector2i x);
-
+	bool is_in_combination(const Vector2i x) const;
+	bool is_in_burst_combination(const Vector2i x) const;
 	void delete_combination(Clock& clc);
-	
-
-	
-	void test_gem(int x, int y);
-	
+	void test_gem(const int x, const int y);
 	void search_combination();
-	
-
 	void update(Clock& clc);
 	
 };
